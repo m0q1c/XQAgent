@@ -1,0 +1,14 @@
+{
+  "name": "desktop-organizer",
+  "version": "1.0.0",
+  "description": "桌面文件分目录整理 — 扫描桌面并按文件类型自动归类（图片/文档/视频/音频/压缩包/代码/程序等），支持预览确认、冲突重命名、自定义分类规则",
+  "author": "WinClaw Team",
+  "license": "MIT",
+  "openclaw": {
+    "emoji": "🗂️",
+    "always": false,
+    "category": "productivity",
+    "builtin": true,
+    "tags": ["desktop", "files", "organize", "productivity", "cleanup"]
+  }
+}

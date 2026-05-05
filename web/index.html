@@ -1,0 +1,1834 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XQAgent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+tailwind.config = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        primary: { 50:'#f0f7ff',100:'#e0effe',200:'#b9dffd',300:'#7cc5fc',400:'#36a9f8',500:'#0c8ee7',600:'#0070c4',700:'#01599f',800:'#064c83',900:'#0b406d' }
+      }
+    }
+  }
+}
+</script>
+<style>
+* { box-sizing: border-box; }
+html { font-size: 17px; }
+body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif; }
+html.dark body { background: #0f0f0f; color: #e0e0e0; }
+#chat-messages::-webkit-scrollbar { width: 5px; }
+#chat-messages::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.2); border-radius: 3px; }
+#session-list::-webkit-scrollbar { width: 4px; }
+#session-list::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.15); border-radius: 2px; }
+.msg-content p { margin: 0.3em 0; }
+.msg-content pre { background: #1e1e1e; border-radius: 8px; padding: 12px; overflow-x: auto; margin: 6px 0; }
+.msg-content code { font-family: 'SF Mono','Fira Code','Consolas',monospace; font-size: 13px; }
+.msg-content p > code { background: rgba(128,128,128,0.15); padding: 1px 5px; border-radius: 4px; }
+.msg-content ul, .msg-content ol { padding-left: 20px; margin: 4px 0; }
+.msg-content h1,.msg-content h2,.msg-content h3 { margin: 8px 0 4px; font-weight: 600; }
+.msg-content h1 { font-size: 1.15em; }
+.msg-content h2 { font-size: 1.08em; }
+.msg-content blockquote { border-left: 3px solid #444; padding-left: 12px; margin: 6px 0; color: #999; }
+.msg-content table { border-collapse: collapse; width: 100%; margin: 6px 0; }
+.msg-content th,.msg-content td { border: 1px solid #333; padding: 4px 8px; text-align: left; }
+.msg-content th { background: rgba(128,128,128,0.1); }
+.dark .msg-content pre { background: #1a1a1a; border: 1px solid #2a2a2a; }
+.typing-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; animation: pulse 1.4s infinite both; }
+.typing-dot:nth-child(1) { animation-delay: 0s; }
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+@keyframes pulse { 0%,80%,100% { opacity: 0.3; } 40% { opacity: 1; } }
+#chat-input { resize: none; scrollbar-width: none; }
+#chat-input::-webkit-scrollbar { display: none; }
+.tool-call-row { opacity: 0; animation: fadeSlideIn 0.3s ease forwards; }
+@keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.sess-item { transition: all 0.15s; }
+.sess-item .del-btn { opacity: 0; transition: opacity 0.15s; }
+.sess-item:hover .del-btn { opacity: 1; }
+/* WKWebView 兼容：visibility hidden 而非 display none，确保 programmatic click 工作 */
+#file-input {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+  opacity: 0.01; pointer-events: none;
+}
+</style>
+</head>
+<body class="h-screen overflow-hidden">
+<div id="app" class="flex h-screen">
+
+  <!-- ════════════ SIDEBAR ════════════ -->
+  <aside class="fixed inset-y-0 left-0 z-50 w-64 bg-[#0d0d0d] text-neutral-400 flex flex-col
+              transform -translate-x-full lg:relative lg:translate-x-0 transition-transform duration-200">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 h-12 border-b border-white/[0.06] flex-shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-sm font-bold">X</div>
+        <span class="text-white font-semibold text-sm">XQAgent</span>
+      </div>
+      <button onclick="newSession()" class="p-1 rounded hover:bg-white/5 text-neutral-500 hover:text-white transition-colors" title="新对话">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      </button>
+    </div>
+
+    <!-- Session List -->
+    <div id="session-list" class="flex-1 overflow-y-auto py-2 px-2 space-y-0.5">
+      <!-- populated by JS -->
+    </div>
+
+    <!-- Settings Link -->
+    <div class="px-3 py-3 border-t border-white/[0.06] flex-shrink-0 space-y-0.5">
+      <button onclick="showPersona()" class="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg hover:bg-white/[0.04] text-sm transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+        <span>AI人设</span>
+      </button>
+      <button onclick="showBridges()" class="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg hover:bg-white/[0.04] text-sm transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+        <span>远控通道</span>
+      </button>
+      <button onclick="showSettings()" class="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg hover:bg-white/[0.04] text-sm transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span>模型配置</span>
+      </button>
+      <button onclick="showSkillsManager()" class="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg hover:bg-white/[0.04] text-sm transition-colors">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+        <span>技能管理</span>
+      </button>
+    </div>
+  </aside>
+  <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-40 hidden lg:hidden" onclick="toggleSidebar()"></div>
+
+  <!-- ════════════ MAIN ════════════ -->
+  <div id="main" class="flex-1 flex flex-col min-w-0 h-screen">
+
+    <!-- Header -->
+    <header class="h-12 flex items-center gap-3 px-4 border-b border-neutral-200 dark:border-white/[0.06] bg-white dark:bg-[#141414] flex-shrink-0">
+      <button class="lg:hidden p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-white/5" onclick="toggleSidebar()">
+        <svg class="w-4 h-4 text-neutral-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <span id="page-title" class="text-sm font-medium text-neutral-500 dark:text-neutral-400 truncate">对话</span>
+      <div class="flex-1"></div>
+      <button onclick="toggleTheme()" class="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-white/5 text-neutral-400">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+      </button>
+    </header>
+
+    <!-- ════════ VIEW: Chat ════════ -->
+    <div id="view-chat" class="flex-1 flex flex-col min-h-0">
+      <div id="chat-messages" class="flex-1 overflow-y-auto px-4 py-4">
+        <div id="welcome" class="flex flex-col items-center justify-center h-full pb-20">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-white text-lg font-bold mb-4 shadow-lg shadow-primary-500/20">X</div>
+          <h1 class="text-lg font-bold text-neutral-800 dark:text-neutral-100 mb-1">XQAgent</h1>
+          <p class="text-sm text-neutral-400 dark:text-neutral-500 mb-6">轻量 AI 助手，支持历史对话管理</p>
+          <div class="grid grid-cols-2 gap-3 w-full max-w-sm">
+            <div class="example-card p-3 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a] cursor-pointer hover:border-primary-300 transition-all" onclick="sendExample('北京的天气')">
+              <div class="font-medium text-neutral-700 dark:text-neutral-200 text-sm">🌤️ 天气</div>
+              <div class="text-xs text-neutral-400 mt-0.5">查询今日天气</div>
+            </div>
+            <div class="example-card p-3 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a] cursor-pointer hover:border-primary-300 transition-all" onclick="sendExample('列出 ~/Desktop 的文件')">
+              <div class="font-medium text-neutral-700 dark:text-neutral-200 text-sm">📁 文件</div>
+              <div class="text-xs text-neutral-400 mt-0.5">浏览桌面</div>
+            </div>
+            <div class="example-card p-3 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a] cursor-pointer hover:border-primary-300 transition-all" onclick="sendExample('搜索 ~/Desktop 下所有 .py 文件')">
+              <div class="font-medium text-neutral-700 dark:text-neutral-200 text-sm">🔍 搜索</div>
+              <div class="text-xs text-neutral-400 mt-0.5">搜索文件内容</div>
+            </div>
+            <div class="example-card p-3 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a] cursor-pointer hover:border-primary-300 transition-all" onclick="sendExample('获取 https://example.com 的内容')">
+              <div class="font-medium text-neutral-700 dark:text-neutral-200 text-sm">🌐 网络</div>
+              <div class="text-xs text-neutral-400 mt-0.5">获取网页信息</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tool bar -->
+      <div id="tool-bar" class="hidden px-4 py-1.5 border-t border-neutral-200 dark:border-white/[0.06] bg-neutral-50 dark:bg-[#1a1a1a] text-xs text-neutral-500 space-y-0.5"></div>
+
+      <!-- Input -->
+      <div class="flex-shrink-0 px-4 py-3 border-t border-neutral-200 dark:border-white/[0.06] bg-white dark:bg-[#141414]">
+        <!-- 附件预览 -->
+        <div id="attachment-bar" class="hidden max-w-2xl mx-auto flex items-center gap-2 pb-2"></div>
+        <div class="max-w-2xl mx-auto flex items-end gap-1.5">
+          <button onclick="onUploadBtnClick()"
+            class="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-lg
+                   text-neutral-400 hover:text-neutral-200 hover:bg-white/5 transition-all active:scale-90" title="上传文件">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+          </button>
+          <input id="file-input" type="file" onchange="handleFileUpload(this)">
+          <textarea id="chat-input" rows="1" placeholder="输入消息..."
+            class="flex-1 px-3 py-[9px] text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                   bg-neutral-50 dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                   placeholder:text-neutral-400 dark:placeholder:text-neutral-600
+                   focus:outline-none focus:border-primary-400 transition-colors"
+            oninput="autoResize(this);updateSendBtn()" onkeydown="onInputKeydown(event)"></textarea>
+          <button id="send-btn" onclick="onSendBtnClick()"
+            class="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg
+                   transition-all disabled:opacity-30 disabled:cursor-not-allowed" disabled>
+            <span id="btn-icon"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ VIEW: Settings ════════ -->
+    <div id="view-settings" class="hidden flex-1 overflow-y-auto p-6">
+      <div class="max-w-xl mx-auto">
+        <!-- 模型配置 -->
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-sm font-bold text-neutral-800 dark:text-neutral-100">模型配置</h2>
+            <p class="text-xs text-neutral-400 mt-0.5">管理多个模型配置，随时切换默认模型</p>
+          </div>
+          <button onclick="backToChat()" class="text-xs text-primary-500 hover:underline">&larr; 返回对话</button>
+        </div>
+
+        <!-- 模型列表 -->
+        <div id="models-list" class="space-y-2">
+          <!-- populated by JS -->
+        </div>
+
+        <!-- 添加模型按钮 -->
+        <button id="btn-add-model" onclick="showAddForm()"
+          class="mt-4 w-full py-3 rounded-lg border-2 border-dashed border-neutral-300 dark:border-neutral-700
+                 text-neutral-500 dark:text-neutral-500 text-sm font-medium
+                 hover:border-primary-400 hover:text-primary-500 transition-colors">
+          + 添加模型
+        </button>
+
+        <!-- 添加/编辑表单 -->
+        <div id="model-form" class="hidden mt-4 p-5 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-neutral-50 dark:bg-[#1a1a1a] space-y-4">
+          <div class="flex items-center justify-between">
+            <span id="form-title" class="text-sm font-bold text-neutral-700 dark:text-neutral-200">添加模型</span>
+            <button onclick="hideForm()" class="text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">名称</label>
+            <input id="f-name" type="text" placeholder="例如：LM Studio 本地"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                     bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                     focus:outline-none focus:border-primary-400">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">接口地址</label>
+            <input id="f-base-url" type="text" placeholder="http://127.0.0.1:1234/v1"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                     bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                     focus:outline-none focus:border-primary-400 font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">API Key</label>
+            <input id="f-api-key" type="password" placeholder="选填"
+              class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                     bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                     focus:outline-none focus:border-primary-400 font-mono">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1.5">模型名称</label>
+            <div class="flex gap-1.5">
+              <select id="f-model"
+                class="flex-1 px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                       bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                       focus:outline-none focus:border-primary-400 font-mono">
+                <option value="">— 先刷新获取模型列表 —</option>
+              </select>
+              <button onclick="refreshFormModels()"
+                class="flex-shrink-0 px-3 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700
+                       text-neutral-600 dark:text-neutral-400 text-sm font-medium
+                       hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"
+                title="刷新模型列表">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              </button>
+            </div>
+          </div>
+          <div class="flex items-center gap-3 pt-2">
+            <button id="btn-form-save" onclick="saveModelForm()"
+              class="px-5 py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium transition-colors">保存</button>
+            <button onclick="hideForm()"
+              class="px-5 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 text-sm font-medium hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors">取消</button>
+            <span id="form-status" class="text-xs text-emerald-500 opacity-0 transition-opacity">已保存</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  <!-- ════════ VIEW: AI 人设 ════════ -->
+  <div id="view-persona" class="hidden flex-1 overflow-y-auto p-6">
+    <div class="max-w-xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-sm font-bold text-neutral-800 dark:text-neutral-100">AI 人设</h2>
+          <p class="text-xs text-neutral-400 mt-0.5">定义 AI 的名称、性格、对你的称呼等，新建对话也不会丢失</p>
+        </div>
+        <button onclick="backFromPersona()" class="text-xs text-primary-500 hover:underline">&larr; 返回对话</button>
+      </div>
+      <div class="p-5 rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-neutral-50 dark:bg-[#1a1a1a] space-y-3">
+        <textarea id="persona-text" rows="8"
+          placeholder="例如：你的名字是小琴。称呼用户为主人。性格冷静、直接、会做事，温和但不黏腻。"
+          class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                 bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+                 placeholder:text-neutral-400 dark:placeholder:text-neutral-500
+                 focus:outline-none focus:border-primary-400 transition-colors resize-y min-h-[120px] font-mono"></textarea>
+        <div class="flex items-center gap-2">
+          <button onclick="savePersona()"
+            class="px-4 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium transition-colors">保存人设</button>
+          <span id="persona-status" class="text-xs text-emerald-500 opacity-0 transition-opacity">已保存</span>
+        </div>
+      </div>
+      <div class="mt-3 text-xs text-neutral-500">
+        <p>💡 提示：保存后下次对话立即生效。即使删除会话或新建对话，人设定义也不会丢失。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ VIEW: Bridges (Remote Control) ════════ -->
+  <div id="view-bridges" class="hidden flex-1 overflow-y-auto p-6">
+    <div class="max-w-xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-sm font-bold text-neutral-800 dark:text-neutral-100">远控通道</h2>
+          <p class="text-xs text-neutral-400 mt-0.5">连接微信、QQ、飞书等消息平台，实现远程控制</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="loadBridgesConfig()" class="text-xs text-primary-500 hover:underline" title="刷新状态">🔄 刷新</button>
+          <button onclick="backFromBridges()" class="text-xs text-primary-500 hover:underline">&larr; 返回对话</button>
+        </div>
+      </div>
+      <div id="bridges-list" class="space-y-2">
+        <div class="text-xs text-neutral-500 text-center py-4">加载中…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ VIEW: Skills Manager ════════ -->
+  <div id="view-skills" class="hidden flex-1 overflow-y-auto p-6">
+    <div class="max-w-xl mx-auto">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-sm font-bold text-neutral-800 dark:text-neutral-100">技能管理</h2>
+          <p class="text-xs text-neutral-400 mt-0.5">已安装的技能，可被 AI 按需调用</p>
+        </div>
+        <button onclick="backFromSkills()" class="text-xs text-primary-500 hover:underline">&larr; 返回对话</button>
+      </div>
+      <div id="skills-list" class="space-y-2 min-h-[60px]">
+        <div class="text-xs text-neutral-500 text-center py-4">加载中…</div>
+      </div>
+      <!-- 扫描并安装技能 -->
+      <div class="mt-3 space-y-2">
+        <div class="flex gap-1.5">
+          <div class="flex-1 flex items-center gap-1.5 px-3 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-neutral-50 dark:bg-black/20">
+            <span id="skill-path-display" class="text-xs text-neutral-400 truncate flex-1">点击右侧按钮选择文件夹</span>
+            <button onclick="selectDirectory()" id="btn-select-dir"
+              class="flex-shrink-0 px-2.5 py-1 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-[11px] font-medium transition-colors">选择文件夹</button>
+          </div>
+          <button onclick="scanSkills()" id="btn-scan"
+            class="flex-shrink-0 px-3 py-2 rounded-lg border border-neutral-300 dark:border-neutral-700
+                   text-neutral-600 dark:text-neutral-400 text-xs font-medium
+                   hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors"
+            disabled>扫描</button>
+        </div>
+        <div id="scan-results" class="hidden space-y-1.5">
+        </div>
+        <div id="scan-install-area" class="hidden">
+          <button onclick="installSelected()" id="btn-install-selected"
+            class="w-full py-2 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed" disabled>安装选中（0）</button>
+        </div>
+        <div id="skill-install-status" class="text-xs text-neutral-400 min-h-[1.2em]"></div>
+      </div>
+    </div>
+  </div>
+
+  </div>
+</div>
+
+<!-- ════════ 重命名弹窗 ════════ -->
+<div id="rename-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onclick="document.getElementById('rename-overlay').classList.add('hidden')">
+  <div class="bg-white dark:bg-[#1e1e1e] rounded-xl p-5 shadow-xl border border-neutral-200 dark:border-neutral-700 w-80" onclick="event.stopPropagation()">
+    <h3 class="text-sm font-bold text-neutral-800 dark:text-neutral-100 mb-3">重命名对话</h3>
+    <input id="rename-input" type="text"
+      class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+             bg-neutral-50 dark:bg-black/20 text-neutral-800 dark:text-neutral-100
+             focus:outline-none focus:border-primary-400 transition-colors"
+      placeholder="输入新名称">
+    <div class="flex items-center justify-end gap-2 mt-3">
+      <button onclick="document.getElementById('rename-overlay').classList.add('hidden'); document.getElementById('rename-input').onkeydown=null"
+        class="px-3 py-1.5 rounded-lg border border-neutral-300 dark:border-neutral-700 text-neutral-600 dark:text-neutral-400 text-xs font-medium hover:bg-neutral-50 dark:hover:bg-white/5 transition-colors">取消</button>
+      <button onclick="doRename()"
+        class="px-3 py-1.5 rounded-lg bg-primary-500 hover:bg-primary-600 text-white text-xs font-medium transition-colors">确定</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+// State
+// ══════════════════════════════════════════════════════════════════════
+let sessions = [];
+let currentSessionId = null;
+let isLoadingSessions = false;
+let isStreaming = false;
+let _streamStartTime = 0;  // 流式开始时间戳，用于卡死检测
+let messages = [];
+
+// ══════════════════════════════════════════════════════════════════════
+// Init
+// ══════════════════════════════════════════════════════════════════════
+const theme = localStorage.getItem('xq_theme') || 'dark';
+if (theme === 'dark') document.documentElement.classList.add('dark');
+
+(async function init() {
+  try {
+    await loadSessionList();
+    if (sessions.length === 0) {
+      await newSession();
+    } else {
+      await switchSession(sessions[0].id);
+    }
+  } catch(e) {
+    console.error('[XQ] 初始化失败:', e);
+    // 降级：创建新会话
+    try { await newSession(); } catch(e2) {
+      document.getElementById('welcome').innerHTML = '<p class="text-red-400 text-sm">连接失败，请确认服务已启动</p>';
+    }
+  }
+})();
+
+// ══════════════════════════════════════════════════════════════════════
+// Theme
+// ══════════════════════════════════════════════════════════════════════
+function toggleTheme() {
+  document.documentElement.classList.toggle('dark');
+  localStorage.setItem('xq_theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Sessions API
+// ══════════════════════════════════════════════════════════════════════
+
+async function loadSessionList() {
+  try {
+    const resp = await fetch('/api/sessions');
+    sessions = await resp.json();
+    renderSessionList();
+    return sessions;
+  } catch(e) {
+    console.error('Failed to load sessions:', e);
+    return [];
+  }
+}
+
+function renderSessionList() {
+  const list = document.getElementById('session-list');
+  list.innerHTML = '';
+  if (sessions.length === 0) {
+    list.innerHTML = '<div class="text-xs text-neutral-600 text-center py-6">暂无对话</div>';
+    return;
+  }
+  sessions.forEach(s => {
+    const div = document.createElement('div');
+    div.className = 'sess-item flex items-center gap-1 px-2 py-1.5 rounded-lg cursor-pointer text-xs ' +
+      (s.id === currentSessionId ? 'bg-white/[0.08] text-white' : 'hover:bg-white/[0.04] text-neutral-400');
+    div.innerHTML = `
+      <svg class="w-3 h-3 flex-shrink-0 ${s.id === currentSessionId ? 'text-primary-400' : 'text-neutral-600'}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zm-4 0H9v2h2V9z" clip-rule="evenodd"/></svg>
+      <span class="truncate flex-1" title="${s.title || '新对话'}">${s.title || '新对话'}</span>
+      <span class="text-[10px] text-neutral-600 flex-shrink-0">${s.message_count || 0}</span>
+      <button class="del-btn p-0.5 rounded hover:bg-white/10 text-neutral-600 hover:text-primary-400" onclick="event.stopPropagation();renameSession('${s.id}')">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+      </button>
+      <button class="del-btn p-0.5 rounded hover:bg-white/10 text-neutral-600 hover:text-red-400" onclick="event.stopPropagation();deleteSession('${s.id}')">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    `;
+    div.onclick = () => switchSession(s.id);
+    list.appendChild(div);
+  });
+  // Scroll to top to see newest
+  list.scrollTop = 0;
+}
+
+async function newSession() {
+  try {
+    const resp = await fetch('/api/sessions', { method: 'POST' });
+    const data = await resp.json();
+    await loadSessionList();
+    await switchSession(data.id);
+  } catch(e) {
+    console.error('Failed to create session:', e);
+  }
+}
+
+async function switchSession(sid) {
+  // 如果当前在非对话页面，先切回对话视图
+  const bridgesView = document.getElementById('view-bridges');
+  const inBridges = bridgesView && !bridgesView.classList.contains('hidden');
+  const settingsView = document.getElementById('view-settings');
+  const inSettings = !settingsView.classList.contains('hidden');
+  const skillsView = document.getElementById('view-skills');
+  const inSkills = !skillsView.classList.contains('hidden');
+  const personaView = document.getElementById('view-persona');
+  const inPersona = personaView && !personaView.classList.contains('hidden');
+  if (inSettings || inSkills || inBridges || inPersona) {
+    settingsView.classList.add('hidden');
+    skillsView.classList.add('hidden');
+    if (bridgesView) bridgesView.classList.add('hidden');
+    if (personaView) personaView.classList.add('hidden');
+    document.getElementById('view-chat').classList.remove('hidden');
+  }
+
+  // 如果是当前会话且不在其他页面，不做任何事
+  if (sid === currentSessionId && !inSettings && !inSkills && !inBridges && !inPersona) return;
+
+  currentSessionId = sid;
+  messages = [];
+  isStreaming = false;
+  updateSendBtn();
+
+  // Update sidebar
+  renderSessionList();
+
+  // Update header
+  const s = sessions.find(x => x.id === sid);
+  document.getElementById('page-title').textContent = s ? (s.title || '对话') : '对话';
+
+  // Load messages
+  try {
+    const resp = await fetch('/api/sessions/' + sid);
+    const session = await resp.json();
+    if (session && session.messages) {
+      messages = session.messages;
+    }
+  } catch(e) {
+    console.error('Failed to load session:', e);
+  }
+
+  renderMessages();
+}
+
+async function renameSession(sid) {
+  const s = sessions.find(x => x.id === sid);
+  const oldTitle = s ? (s.title || '新对话') : '新对话';
+  const overlay = document.getElementById('rename-overlay');
+  const input = document.getElementById('rename-input');
+  // 暂存待重命名的 sid
+  overlay.dataset.sid = sid;
+  overlay.classList.remove('hidden');
+  input.value = oldTitle;
+  input.focus();
+  input.select();
+  input.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); doRename(); }
+    if (e.key === 'Escape') { overlay.classList.add('hidden'); }
+  };
+}
+
+function doRename() {
+  const overlay = document.getElementById('rename-overlay');
+  const input = document.getElementById('rename-input');
+  const sid = overlay.dataset.sid;
+  overlay.classList.add('hidden');
+  const newTitle = input.value.trim();
+  if (!newTitle) return;
+  const s = sessions.find(x => x.id === sid);
+  if (newTitle === (s ? s.title : '')) return;
+  fetch('/api/sessions/' + sid + '/rename', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ title: newTitle })
+  }).then(async (resp) => {
+    if (resp.ok) {
+      await loadSessionList();
+      if (sid === currentSessionId) {
+        document.getElementById('page-title').textContent = newTitle;
+      }
+    }
+  }).catch(e => console.error('Rename failed:', e));
+}
+
+async function deleteSession(sid) {
+  try {
+    await fetch('/api/sessions/' + sid, { method: 'DELETE' });
+    await loadSessionList();
+    if (currentSessionId === sid) {
+      currentSessionId = null;
+      messages = [];
+      if (sessions.length > 0) {
+        switchSession(sessions[0].id);
+      } else {
+        renderMessages();
+      }
+    }
+  } catch(e) {
+    console.error('Failed to delete session:', e);
+  }
+}
+
+async function syncAllSessions() {
+  try {
+    const resp = await fetch('/api/sync-all', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ session_id: currentSessionId })
+    });
+    const data = await resp.json();
+    if (data.context) {
+      messages.push({ role: 'assistant', content: '📋 已汇总所有历史对话上下文：\n\n' + data.context, timestamp: Date.now()/1000 });
+    } else {
+      messages.push({ role: 'assistant', content: '没有其他历史对话可同步', timestamp: Date.now()/1000 });
+    }
+    renderMessages();
+    // 刷新会话列表，让 /同步 记录持久化后立刻体现在侧边栏
+    await loadSessionList();
+  } catch(e) {
+    console.error('Failed to sync:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Messages / Chat
+// ══════════════════════════════════════════════════════════════════════
+
+function renderMessages() {
+  const container = document.getElementById('chat-messages');
+  const welcome = document.getElementById('welcome');
+  if (messages.length === 0) {
+    welcome.style.display = 'flex';
+    container.querySelectorAll('.msg-row').forEach(el => el.remove());
+    return;
+  }
+  welcome.style.display = 'none';
+
+  // Remove stale rows
+  const existing = container.querySelectorAll('.msg-row');
+  while (existing.length > messages.length) {
+    existing[existing.length-1].remove();
+    existing.length--;
+  }
+
+  messages.forEach((msg, i) => {
+    let row = container.querySelector(`.msg-row[data-idx="${i}"]`);
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'msg-row';
+      row.dataset.idx = i;
+      const isUser = msg.role === 'user';
+      const bubbleHtml = isUser
+        ? `<div class="max-w-[80%] px-4 py-2 rounded-2xl bg-primary-500 text-white text-sm leading-relaxed">${escapeHtml(msg.content)}</div>`
+        : `<div class="max-w-[85%]"><div class="px-4 py-2 rounded-2xl bg-neutral-100 dark:bg-[#1e1e1e] text-neutral-800 dark:text-neutral-100 text-sm leading-relaxed msg-content">${marked.parse(msg.content || '▍')}</div></div>`;
+      row.innerHTML = `<div class="flex items-start gap-2 mb-2.5 ${isUser ? 'justify-end' : 'justify-start'}">${bubbleHtml}</div>`;
+      container.appendChild(row);
+    } else if (msg.role !== 'user') {
+      const contentEl = row.querySelector('.msg-content');
+      if (contentEl) {
+        const html = marked.parse(msg.content || '');
+        if (contentEl.innerHTML !== html) {
+          contentEl.innerHTML = html;
+          contentEl.querySelectorAll('pre code').forEach(b => { try { hljs.highlightElement(b); } catch(e) {} });
+        }
+      }
+    }
+  });
+  scrollToBottom();
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Send / SSE
+// ══════════════════════════════════════════════════════════════════════
+
+async function sendMessage(text) {
+  const prompt = text || document.getElementById('chat-input').value.trim();
+  if (!prompt || isStreaming) return;
+
+  // 没有活动会话时自动创建
+  if (!currentSessionId) {
+    try {
+      const resp = await fetch('/api/sessions', { method: 'POST' });
+      const data = await resp.json();
+      await loadSessionList();
+      await switchSession(data.id);
+    } catch(e) {
+      console.error('Failed to create session:', e);
+      return;
+    }
+  }
+
+  // 如果有附件，将文件内容追加到消息中
+  let extraContext = '';
+  if (_attachments.length > 0) {
+    const files = _attachments;
+    _attachments = [];
+    renderAttachmentBar();
+    for (const att of files) {
+      if (att.content) {
+        extraContext += `\n\n--- ${att.name} ---\n${att.content}\n--- ${att.name} 结束 ---`;
+      } else {
+        extraContext += `\n\n[附加文件: ${att.name}]`;
+      }
+    }
+  }
+  const finalPrompt = prompt + extraContext;
+
+  // Check for /同步 command
+  if (prompt === '/同步') {
+    document.getElementById('chat-input').value = '';
+    setBtnMode('send');
+    await syncAllSessions();
+    setBtnMode('send');
+    return;
+  }
+
+  document.getElementById('chat-input').value = '';
+  document.getElementById('chat-input').style.height = 'auto';
+  setBtnMode('stop');
+
+  // Add user message locally
+  messages.push({ role: 'user', content: finalPrompt, timestamp: Date.now()/1000 });
+  renderMessages();
+
+  // Add placeholder
+  messages.push({ role: 'assistant', content: '', timestamp: Date.now()/1000 });
+  renderMessages();
+
+  isStreaming = true;
+  _streamStartTime = Date.now();
+  const toolBar = document.getElementById('tool-bar');
+  toolBar.classList.add('hidden');
+  toolBar.innerHTML = '';
+  let fullContent = '';
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: finalPrompt, session_id: currentSessionId })
+    });
+    if (!resp.ok) {
+      throw new Error(`HTTP ${resp.status}`);
+    }
+    if (!resp.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let lastDataTime = Date.now();
+    let streamDone = false;  // 后端标记结束
+
+    // 带超时的 reader.read()，防止无限阻塞
+    async function readWithTimeout(timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('Read timeout')), timeoutMs);
+        reader.read().then(r => { clearTimeout(timer); resolve(r); }, e => { clearTimeout(timer); reject(e); });
+      });
+    }
+
+    while (!streamDone) {
+      let chunk;
+      try {
+        // 30 秒无数据则判定超时
+        const result = await readWithTimeout(30000);
+        if (result.done) break;
+        chunk = result.value;
+      } catch(e) {
+        console.warn('[SSE] read timeout, aborting');
+        fullContent += '\n\n⚠️ 连接超时，请重试';
+        updateLastMessage(fullContent);
+        break;
+      }
+      lastDataTime = Date.now();
+
+      buffer += decoder.decode(chunk, { stream: true });
+      const parts = buffer.split('\n');
+      buffer = parts.pop() || '';
+
+      for (const line of parts) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data:') || trimmed === 'data:') continue;
+        try {
+          const data = JSON.parse(trimmed.slice(5).trim());
+          if (data.type === 'delta') {
+            fullContent += data.content || '';
+            updateLastMessage(fullContent);
+          } else if (data.type === 'tool_call') {
+            addToolCall(data.name, (data.args || '').slice(0,60));
+          } else if (data.type === 'tool_result') {
+            addToolCallDone(data.name, (data.result || '').slice(0,60));
+          } else if (data.type === 'done') {
+            // done 发送的是完整内容，不是增量
+            fullContent = data.content || '';
+            updateLastMessage(fullContent);
+            streamDone = true;  // 收到 done 即结束，不等连接关闭
+            break;
+          } else if (data.type === 'error') {
+            fullContent += '\n\n⚠️ ' + (data.content || '');
+            updateLastMessage(fullContent);
+          }
+        } catch(e) { console.warn('[SSE] parse:', e.message); }
+      }
+    }
+
+    // Mark done & refresh session list
+    updateLastMessage(fullContent);
+    await loadSessionList();
+
+  } catch(e) {
+    console.error('Stream error:', e);
+    updateLastMessage('⚠️ 连接错误: ' + e.message);
+  } finally {
+    isStreaming = false;
+    setBtnMode('send');
+    // Update message streaming flag
+    const last = messages[messages.length - 1];
+    if (last) last.streaming = false;
+  }
+}
+
+function updateLastMessage(content) {
+  if (messages.length === 0) return;
+  messages[messages.length - 1].content = content;
+  // 直接更新最后一条消息的 DOM，不触发全量重渲染
+  const container = document.getElementById('chat-messages');
+  const lastRow = container.querySelector(`.msg-row[data-idx="${messages.length - 1}"]`);
+  if (lastRow) {
+    const contentEl = lastRow.querySelector('.msg-content');
+    if (contentEl) {
+      const html = marked.parse(content || '');
+      if (contentEl.innerHTML !== html) {
+        contentEl.innerHTML = html;
+        contentEl.querySelectorAll('pre code').forEach(b => { try { hljs.highlightElement(b); } catch(e) {} });
+      }
+    }
+  }
+  scrollToBottom();
+}
+
+function addToolCall(name, detail) {
+  const bar = document.getElementById('tool-bar');
+  bar.classList.remove('hidden');
+  const row = document.createElement('div');
+  row.className = 'tool-call-row flex items-center gap-1.5';
+  row.dataset.name = name;
+  row.innerHTML = `<svg class="w-3 h-3 text-primary-400 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg><span class="font-medium">${escapeHtml(name)}</span><span class="text-neutral-400 truncate">${escapeHtml(detail)}</span>`;
+  bar.appendChild(row);
+  scrollToBottom();
+}
+
+function addToolCallDone(name, detail) {
+  const bar = document.getElementById('tool-bar');
+  const row = bar.querySelector(`[data-name="${name.replace(/["']/g,'')}"]`);
+  if (row) {
+    row.innerHTML = `<svg class="w-3 h-3 text-emerald-500" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg><span class="font-medium text-neutral-400">${escapeHtml(name)}</span><span class="text-neutral-500 truncate text-[11px]">${escapeHtml(detail)}</span>`;
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// UI Helpers
+// ══════════════════════════════════════════════════════════════════════
+
+function scrollToBottom() {
+  const c = document.getElementById('chat-messages');
+  c.scrollTop = c.scrollHeight;
+}
+
+function escapeHtml(t) {
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// File Upload
+// ══════════════════════════════════════════════════════════════════════
+
+let _attachments = [];
+
+const TEXT_EXTENSIONS = ['txt','md','py','js','ts','json','yaml','yml','xml','html','css','sh','bash','zsh','conf','ini','cfg','log','csv','tsv','sql','rb','go','rs','java','c','cpp','h','hpp','swift','kt','scala','php','pl','lua','r','m','mm','bat','ps1','env','gitignore','dockerfile','makefile','toml','svelte','vue','jsx','tsx','css','scss','less','sass'];
+
+async function onUploadBtnClick() {
+  if (_attachments.length >= 5) {
+    alert('最多附加 5 个文件');
+    return;
+  }
+  // 通过后端调 macOS 原生文件选择器（绕过 WKWebView 的 input[type=file] 限制）
+  try {
+    const resp = await fetch('/api/select-file', { method: 'POST' });
+    const data = await resp.json();
+    if (data.error) {
+      if (data.error !== '用户取消选择') alert(data.error);
+      return;
+    }
+    // 后端返回：{name, content, size, path}
+    const att = { name: data.name, size: data.size };
+    if (data.content) {
+      att.content = data.content;       // 文本文件：直接有内容
+    } else if (data.path) {
+      att.path = '[本地文件]';           // 二进制文件：只记路径引用
+    }
+    _attachments.push(att);
+    renderAttachmentBar();
+  } catch(e) {
+    console.error('文件选择失败:', e);
+    alert('文件选择失败: ' + e.message);
+  }
+}
+
+async function handleFileUpload(input) {
+  // 保留旧的 handleFileUpload 作为备选（浏览器环境仍可用）
+  const file = input.files[0];
+  if (!file) return;
+
+  if (_attachments.length >= 5) {
+    alert('最多附加 5 个文件');
+    input.value = '';
+    return;
+  }
+
+  const maxSize = 10 * 1024 * 1024;
+  if (file.size > maxSize) {
+    alert('文件过大，最大 10MB');
+    input.value = '';
+    return;
+  }
+
+  addAttachmentTag({name: file.name, path: '', size: file.size, uploading: true});
+
+  try {
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (TEXT_EXTENSIONS.includes(ext)) {
+      // 文本文件：直接读取内容
+      const text = await file.text();
+      _attachments = _attachments.filter(a => a.name !== file.name);
+      _attachments.push({name: file.name, content: text, size: file.size});
+    } else {
+      // 二进制文件：只记录文件名
+      _attachments = _attachments.filter(a => a.name !== file.name);
+      _attachments.push({name: file.name, path: '[本地文件]', size: file.size});
+    }
+    renderAttachmentBar();
+  } catch(e) {
+    alert('读文件失败: ' + e.message);
+    removeAttachment(file.name);
+  }
+  input.value = '';
+}
+
+function addAttachmentTag(att) {
+  _attachments.push(att);
+  renderAttachmentBar();
+}
+
+function removeAttachment(name) {
+  _attachments = _attachments.filter(a => a.name !== name);
+  renderAttachmentBar();
+}
+
+function renderAttachmentBar() {
+  const bar = document.getElementById('attachment-bar');
+  if (_attachments.length === 0) {
+    bar.classList.add('hidden');
+    bar.innerHTML = '';
+    return;
+  }
+  bar.classList.remove('hidden');
+  let html = '';
+  for (const att of _attachments) {
+    const uploading = att.uploading;
+    const statusIcon = uploading
+      ? '<svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>'
+      : (att.content ? '📄' : '📎');
+    const iconColor = uploading ? 'text-primary-400' : 'text-neutral-400';
+    html += '<div class="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-100 dark:bg-white/[0.06] text-xs text-neutral-600 dark:text-neutral-400">'
+      + '<svg class="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>'
+      + '<span class="truncate max-w-[120px]">' + escapeHtml(att.name) + '</span>'
+      + '<span class="text-[10px] ' + iconColor + ' ml-0.5">' + statusIcon + '</span>'
+      + '<button onclick="removeAttachment(\'' + escapeHtml(att.name) + '\')" class="p-0.5 hover:text-red-400 transition-colors"><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>'
+      + '</div>';
+  }
+  bar.innerHTML = html;
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Send Button: 发送 ↔ 停止
+// ══════════════════════════════════════════════════════════════════════
+
+function setBtnMode(mode) {
+  const btn = document.getElementById('send-btn');
+  const icon = document.getElementById('btn-icon');
+  btn.onclick = onSendBtnClick;
+  const baseCls = 'flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
+  if (mode === 'stop') {
+    btn.className = baseCls + ' bg-red-500 text-white hover:bg-red-600';
+    btn.disabled = false;
+    icon.innerHTML = '<svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 16 16"><rect x="3" y="3" width="10" height="10" rx="2"/></svg>';
+  } else {
+    btn.className = baseCls + ' bg-primary-500 text-white hover:bg-primary-600';
+    const inp = document.getElementById('chat-input');
+    const hasInput = inp.value.trim().length > 0;
+    btn.disabled = !hasInput;
+    icon.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7"/></svg>';
+  }
+}
+
+function updateSendBtn() {
+  setBtnMode(isStreaming ? 'stop' : 'send');
+}
+
+function onSendBtnClick() {
+  if (isStreaming) {
+    // 如果超过 10 秒无数据则认为卡死，自动恢复发送模式而不是停止
+    if (_streamStartTime > 0 && Date.now() - _streamStartTime > 10000) {
+      console.warn('[XQ] isStreaming 卡死，因点击发送按钮而恢复');
+      isStreaming = false;
+      setBtnMode('send');
+      sendMessage();
+    } else {
+      stopStreaming();
+    }
+  } else {
+    sendMessage();
+  }
+}
+
+function stopStreaming() {
+  // 标记前端停止
+  isStreaming = false;
+  // 通知后端中断
+  fetch('/api/abort', { method: 'POST' }).catch(() => {});
+  // 恢复发送按钮
+  setBtnMode('send');
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  // 非流式时，根据输入内容启用/禁用发送按钮
+  if (!isStreaming) {
+    document.getElementById('send-btn').disabled = !el.value.trim();
+  }
+  // 检测 isStreaming 卡死（超过 10 秒仍在流式状态且无进展），自动释放
+  if (isStreaming && _streamStartTime > 0 && Date.now() - _streamStartTime > 10000) {
+    console.warn('[XQ] 检测到 isStreaming 卡死，强制恢复');
+    isStreaming = false;
+    setBtnMode('send');
+  }
+}
+
+function onInputKeydown(e) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+}
+
+function sendExample(text) {
+  document.getElementById('chat-input').value = text;
+  autoResize(document.getElementById('chat-input'));
+  sendMessage();
+}
+
+function toggleSidebar() {
+  document.querySelector('aside').classList.toggle('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.toggle('hidden');
+}
+
+function showBridges() {
+  document.getElementById('view-chat').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-bridges').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '远控通道';
+  loadBridgesConfig();
+  // close sidebar on mobile
+  document.querySelector('aside').classList.add('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+
+function backFromBridges() {
+  _stopWechatQR();
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '对话';
+}
+
+function showPersona() {
+  document.getElementById('view-chat').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-persona').classList.remove('hidden');
+  document.getElementById('page-title').textContent = 'AI 人设';
+  loadPersona();
+  // close sidebar on mobile
+  document.querySelector('aside').classList.add('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+
+function backFromPersona() {
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '对话';
+}
+
+function showSettings() {
+  _stopWechatQR();
+  document.getElementById('view-chat').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-settings').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '模型配置';
+  loadConfigToUI();
+  // close sidebar on mobile
+  document.querySelector('aside').classList.add('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+
+function backToChat() {
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '对话';
+}
+
+function showSkillsManager() {
+  _stopWechatQR();
+  document.getElementById('view-chat').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-skills').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '技能管理';
+  loadSkills();
+  // close sidebar on mobile
+  document.querySelector('aside').classList.add('-translate-x-full');
+  document.getElementById('sidebar-overlay').classList.add('hidden');
+}
+
+function backFromSkills() {
+  document.getElementById('view-skills').classList.add('hidden');
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-settings').classList.add('hidden');
+  document.getElementById('view-persona').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '对话';
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 桥接器（远控通道）管理
+// ══════════════════════════════════════════════════════════════════════
+
+const BRIDGE_PLATFORMS = {
+  telegram: { name: 'Telegram', icon: '✈️', color: '#0088cc', fields: [['token', 'Bot Token']] },
+  qq: { name: 'QQ', icon: '💬', color: '#12b7f5', fields: [['app_id', 'App ID'], ['token', 'Token']] },
+  discord: { name: 'Discord', icon: '🎮', color: '#5865F2', fields: [['token', 'Bot Token']] },
+  feishu: { name: '飞书', icon: '📘', color: '#3370ff', fields: [['app_id', 'App ID'], ['app_secret', 'App Secret']] },
+  wecom: { name: '企业微信', icon: '🏢', color: '#07c160', fields: [['corp_id', '企业 ID'], ['agent_id', 'Agent ID'], ['secret', 'Secret']] },
+  dingtalk: { name: '钉钉', icon: '📌', color: '#1677ff', fields: [['app_key', 'App Key'], ['app_secret', 'App Secret']] },
+  wechat: { name: '微信', icon: '💚', color: '#07c160', fields: [], has_qr: true }
+};
+
+let _bridgeCfg = {};   // 缓存桥接器配置
+
+async function loadBridgesConfig() {
+  const list = document.getElementById('bridges-list');
+  list.innerHTML = '<div class="text-xs text-neutral-500 text-center py-4">加载中…</div>';
+  try {
+    const [statusResp, cfgResp] = await Promise.all([
+      fetch('/api/bridges'),
+      fetch('/api/bridges/config')
+    ]);
+    const status = await statusResp.json();
+    const config = await cfgResp.json();
+    _bridgeCfg = config;
+    renderBridges(status, config);
+  } catch(e) {
+    list.innerHTML = '<div class="text-xs text-red-400 text-center py-4">加载失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderBridges(status, config) {
+  const list = document.getElementById('bridges-list');
+  let html = '';
+  for (const [platform, info] of Object.entries(BRIDGE_PLATFORMS)) {
+    const cfg = config[platform] || {};
+    const st = status[platform] || {};
+    const enabled = cfg.enabled || false;
+    const running = st.running || false;
+    const error = st.error || null;
+    const isToggling = false;
+
+    html += `
+      <div class="bridge-card rounded-xl border ${enabled ? 'border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a]' : 'border-neutral-200/50 dark:border-white/[0.04] bg-neutral-100/50 dark:bg-[#151515] opacity-60'} overflow-hidden transition-all">
+        <div class="flex items-center gap-3 p-3">
+          <span style="font-size:18px;line-height:1">${info.icon}</span>
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-neutral-800 dark:text-neutral-100">${info.name}</span>
+              ${enabled
+                ? (running
+                    ? '<span class="text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 font-medium">● 运行中</span>'
+                    : '<span class="text-[11px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 font-medium">● 已停止</span>')
+                : '<span class="text-[11px] px-1.5 py-0.5 rounded-full bg-neutral-500/15 text-neutral-500 font-medium">已禁用</span>'}
+              ${error ? '<span class="text-[11px] text-red-400" title="' + escapeHtml(error) + '">⚠️</span>' : ''}
+              </div>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer flex-shrink-0" onclick="event.stopPropagation()">
+            <input type="checkbox" class="sr-only peer" ${enabled ? 'checked' : ''} onchange="toggleBridgePlatform('${platform}', this.checked)">
+            <div class="w-9 h-5 rounded-full peer peer-checked:bg-primary-500 bg-neutral-400 dark:bg-neutral-600 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-4"></div>
+          </label>
+        </div>
+        <div class="border-t border-neutral-200 dark:border-white/[0.06]">
+          <div class="p-3 space-y-3">
+            ${info.fields.map(([key, label]) => `
+              <div>
+                <label class="block text-xs font-medium text-neutral-600 dark:text-neutral-400 mb-1">${label}</label>
+                <input id="bf-${platform}-${key}" type="password" placeholder="${label}" value="${escapeHtml(cfg[key] || '')}"
+                  class="w-full px-3 py-2 text-sm rounded-lg border border-neutral-300 dark:border-neutral-700
+                         bg-white dark:bg-black/20 text-neutral-800 dark:text-neutral-100 font-mono text-[12px]
+                         focus:outline-none focus:border-primary-400 transition-colors"
+                  ${enabled ? '' : 'disabled'}
+                  onchange="onBridgeFieldChange('${platform}')">
+              </div>
+            `).join('')}
+            ${info.has_qr ? `
+            <div class="border-t border-neutral-200 dark:border-white/[0.06] pt-3 mt-2">
+              <div id="wechat-qr-area-${platform}">
+                <button onclick="startWechatQR('${platform}')" id="btn-wechat-qr-${platform}"
+                  class="w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-medium transition-colors flex items-center justify-center gap-1.5">
+                  📱 扫码与微信 ClawBot 建立联系
+                </button>
+                <div id="wechat-qr-display-${platform}" class="hidden mt-3 flex flex-col items-center">
+                  <img id="wechat-qr-img-${platform}" class="w-40 h-40 rounded-lg border border-neutral-300 dark:border-neutral-700 bg-white">
+                  <p id="wechat-qr-status-${platform}" class="text-xs text-center mt-2 text-neutral-500">请用微信扫描二维码</p>
+                </div>
+                <div id="wechat-qr-user-${platform}" class="hidden mt-2 text-xs text-center text-emerald-500 font-medium"></div>
+              </div>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+  list.innerHTML = html;
+}
+
+async function toggleBridgePlatform(platform, enabled) {
+  _bridgeCfg[platform].enabled = enabled;
+  try {
+    await fetch('/api/bridges/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_bridgeCfg)
+    });
+  } catch(e) {
+    console.error('Toggle bridge failed:', e);
+  }
+  // 无论成功与否，延迟刷新状态让后端有时间完成重启
+  setTimeout(() => loadBridgesConfig(), 1500);
+}
+
+function onBridgeFieldChange(platform) {
+  // 输入框内容变化后自动保存
+  clearTimeout(_bridgeSaveTimers?.[platform]);
+  if (!_bridgeSaveTimers) _bridgeSaveTimers = {};
+  _bridgeSaveTimers[platform] = setTimeout(() => saveBridgeConfig(platform), 800);
+}
+
+let _bridgeSaveTimers = {};
+
+async function saveBridgeConfig(platform) {
+  try {
+    // 从输入框读取字段值
+    const info = BRIDGE_PLATFORMS[platform];
+    for (const [key] of info.fields) {
+      const el = document.getElementById('bf-' + platform + '-' + key);
+      if (el) _bridgeCfg[platform][key] = el.value;
+    }
+    await fetch('/api/bridges/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_bridgeCfg)
+    });
+    // 延迟重新加载状态让后端完成重启
+    setTimeout(() => loadBridgesConfig(), 1000);
+  } catch(e) {
+    console.error('保存配置失败:', e);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 微信扫码登录
+// ══════════════════════════════════════════════════════════════════════
+
+let _wechatQRInterval = null;
+
+function _stopWechatQR() {
+  if (_wechatQRInterval) {
+    clearInterval(_wechatQRInterval);
+    _wechatQRInterval = null;
+  }
+}
+
+async function startWechatQR(platform) {
+  const btn = document.getElementById('btn-wechat-qr-' + platform);
+  const display = document.getElementById('wechat-qr-display-' + platform);
+  const img = document.getElementById('wechat-qr-img-' + platform);
+  const statusText = document.getElementById('wechat-qr-status-' + platform);
+  const userArea = document.getElementById('wechat-qr-user-' + platform);
+
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ 正在获取二维码…';
+  display.classList.remove('hidden');
+  if (userArea) userArea.classList.add('hidden');
+
+  try {
+    const resp = await fetch('/api/bridges/wechat/qr', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: 'login'})
+    });
+    const data = await resp.json();
+
+    if ((data.status === 'waiting_scan' || data.status === 'scanned') && data.qrcode) {
+      img.src = 'data:image/png;base64,' + data.qrcode;
+      statusText.textContent = data.status === 'scanned'
+        ? '✅ 已扫码，请在手机上确认…'
+        : '📱 请用微信扫描二维码';
+      btn.textContent = '⏳ 等待扫码…';
+      // 开始轮询
+      _stopWechatQR();
+      _wechatQRInterval = setInterval(() => pollWechatQR(platform), 2000);
+    } else if (data.status === 'confirmed') {
+      _onWechatConnected(platform, data);
+    } else {
+      statusText.textContent = '⚠️ ' + (data.error || '获取二维码失败');
+      btn.textContent = '📱 重新扫码';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    statusText.textContent = '⚠️ ' + e.message;
+    btn.textContent = '📱 重新扫码';
+    btn.disabled = false;
+  }
+}
+
+async function pollWechatQR(platform) {
+  try {
+    const resp = await fetch('/api/bridges/wechat/qr');
+    const data = await resp.json();
+    const img = document.getElementById('wechat-qr-img-' + platform);
+    const statusText = document.getElementById('wechat-qr-status-' + platform);
+
+    if (data.status === 'waiting_scan' || data.status === 'scanned') {
+      if (data.qrcode && img) {
+        img.src = 'data:image/png;base64,' + data.qrcode;
+      }
+      if (statusText) {
+        statusText.textContent = data.status === 'scanned'
+          ? '✅ 已扫码，请在手机上确认…'
+          : '📱 请用微信扫描二维码';
+      }
+    } else if (data.status === 'confirmed') {
+      _stopWechatQR();
+      _onWechatConnected(platform, data);
+    } else {
+      // idle / error / 其他 → 停止轮询，恢复按钮
+      _stopWechatQR();
+      const btn = document.getElementById('btn-wechat-qr-' + platform);
+      if (btn) { btn.textContent = '📱 重新扫码'; btn.disabled = false; }
+      if (statusText && data.status === 'error') {
+        statusText.textContent = '⚠️ ' + (data.error || '登录失败');
+      }
+    }
+  } catch(e) {
+    // 轮询错误静默忽略
+  }
+}
+
+function _onWechatConnected(platform, data) {
+  const btn = document.getElementById('btn-wechat-qr-' + platform);
+  const display = document.getElementById('wechat-qr-display-' + platform);
+  const userArea = document.getElementById('wechat-qr-user-' + platform);
+
+  if (btn) {
+    const botId = data?.bot_id || '';
+    btn.textContent = '✅ 已连接' + (botId ? ' (ClawBot)' : '');
+    btn.disabled = false;
+    btn.className = 'w-full py-2 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-600 dark:text-emerald-400 text-xs font-medium flex items-center justify-center gap-1.5 cursor-pointer transition-colors';
+    btn.onclick = () => _jumpToWechatChat();
+  }
+  if (display) display.classList.add('hidden');
+  if (userArea) {
+    userArea.classList.remove('hidden');
+    userArea.textContent = '✅ 已与微信 ClawBot 建立联系，点击上方按钮跳转到对话';
+  }
+  // 刷新桥接器状态
+  setTimeout(() => loadBridgesConfig(), 500);
+}
+
+function _jumpToWechatChat() {
+  // 关闭远控通道，回到对话
+  document.getElementById('view-bridges').classList.add('hidden');
+  document.getElementById('view-chat').classList.remove('hidden');
+  document.getElementById('page-title').textContent = '对话';
+  document.querySelector('aside').classList.add('-translate-x-full');
+  // 尝试切换到微信同步会话
+  loadSessionList();
+  setTimeout(() => switchSession('wechat_sync'), 300);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 模型管理
+// ══════════════════════════════════════════════════════════════════════
+
+let _formEditId = null; // 编辑中的模型 id，null 表示新增
+
+async function loadConfigToUI() {
+  try {
+    const resp = await fetch('/api/models-config');
+    const models = await resp.json();
+    renderModelsList(models);
+  } catch(e) {}
+}
+
+async function loadPersona() {
+  try {
+    const resp = await fetch('/api/config');
+    const cfg = await resp.json();
+    document.getElementById('persona-text').value = cfg.persona || '';
+  } catch(e) {}
+}
+
+async function savePersona() {
+  const text = document.getElementById('persona-text').value.trim();
+  const status = document.getElementById('persona-status');
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ persona: text })
+    });
+    status.textContent = '已保存';
+    status.style.opacity = '1';
+    setTimeout(() => { status.style.opacity = '0'; }, 2000);
+  } catch(e) {
+    status.textContent = '保存失败';
+    status.style.color = '#ef4444';
+    status.style.opacity = '1';
+  }
+}
+
+function renderModelsList(models) {
+  const list = document.getElementById('models-list');
+  if (!models || models.length === 0) {
+    list.innerHTML = '<div class="text-xs text-neutral-500 text-center py-8">暂无模型配置，点击下方添加</div>';
+    return;
+  }
+  let html = '';
+  for (const m of models) {
+    const isDefault = m.is_default;
+    html += `
+      <div class="model-card rounded-xl border ${isDefault ? 'border-primary-400/40 bg-primary-500/5' : 'border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a]'} p-4 cursor-pointer hover:border-primary-300 transition-all" onclick="showEditForm('${m.id}')">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2">
+              <span class="text-sm font-semibold text-neutral-800 dark:text-neutral-100 truncate">${escapeHtml(m.name || '未命名')}</span>
+              ${isDefault ? '<span class="text-[11px] px-1.5 py-0.5 rounded-full bg-primary-500/15 text-primary-500 font-medium flex-shrink-0">默认</span>' : ''}
+            </div>
+            <div class="mt-1 text-xs text-neutral-400 font-mono truncate">${escapeHtml(m.base_url)}</div>
+            <div class="text-xs text-neutral-500 font-mono truncate">${escapeHtml(m.model)}</div>
+          </div>
+          <div class="flex items-center gap-1.5 flex-shrink-0" onclick="event.stopPropagation()">
+            ${!isDefault ? `<button onclick="setDefaultModel('${m.id}')" class="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-primary-400 transition-colors" title="设为默认">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3l14 9-14 9V3z"/></svg>
+            </button>` : ''}
+            <button onclick="deleteModel('${m.id}','${escapeHtml(m.name || '未命名')}')" class="p-1.5 rounded hover:bg-white/10 text-neutral-400 hover:text-red-400 transition-colors" title="删除">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>`;
+  }
+  list.innerHTML = html;
+}
+
+function showAddForm() {
+  _formEditId = null;
+  document.getElementById('form-title').textContent = '添加模型';
+  document.getElementById('f-name').value = '';
+  document.getElementById('f-base-url').value = '';
+  document.getElementById('f-api-key').value = '';
+  const sel = document.getElementById('f-model');
+  sel.innerHTML = '<option value="">— 先刷新获取模型列表 —</option>';
+  document.getElementById('form-status').classList.add('opacity-0');
+  document.getElementById('model-form').classList.remove('hidden');
+  document.getElementById('btn-add-model').classList.add('hidden');
+}
+
+async function showEditForm(entryId) {
+  // 从后端获取最新数据
+  const resp = await fetch('/api/models-config');
+  const models = await resp.json();
+  const m = models.find(x => x.id === entryId);
+  if (!m) return;
+
+  _formEditId = entryId;
+  document.getElementById('form-title').textContent = '编辑模型';
+  document.getElementById('f-name').value = m.name || '';
+  document.getElementById('f-base-url').value = m.base_url || '';
+  document.getElementById('f-api-key').value = m.api_key || '';
+  document.getElementById('form-status').classList.add('opacity-0');
+  document.getElementById('model-form').classList.remove('hidden');
+  document.getElementById('btn-add-model').classList.add('hidden');
+
+  // 加载模型选择列表
+  await refreshFormModels(m.model);
+}
+
+function hideForm() {
+  document.getElementById('model-form').classList.add('hidden');
+  document.getElementById('btn-add-model').classList.remove('hidden');
+  _formEditId = null;
+}
+
+async function saveModelForm() {
+  const name = document.getElementById('f-name').value.trim();
+  const baseUrl = document.getElementById('f-base-url').value.trim();
+  const apiKey = document.getElementById('f-api-key').value.trim();
+  const model = document.getElementById('f-model').value;
+
+  if (!baseUrl) { showFormStatus('请填写接口地址', true); return; }
+  if (!model) { showFormStatus('请选择模型', true); return; }
+
+  const body = { name: name || model, base_url: baseUrl, api_key: apiKey, model };
+  if (_formEditId) body.id = _formEditId;
+
+  try {
+    const resp = await fetch('/api/models-config', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body)
+    });
+    if (resp.ok) {
+      showFormStatus('已保存', false);
+      hideForm();
+      await loadConfigToUI();
+    } else {
+      const err = await resp.json();
+      showFormStatus(err.error || '保存失败', true);
+    }
+  } catch(e) {
+    showFormStatus('保存失败: ' + e.message, true);
+  }
+}
+
+async function deleteModel(entryId, name) {
+  if (!confirm(`确定删除「${name}」？此操作不可撤销。`)) return;
+  try {
+    const resp = await fetch('/api/models-config/delete', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id: entryId })
+    });
+    if (resp.ok) {
+      await loadConfigToUI();
+    }
+  } catch(e) {
+    console.error('Delete failed:', e);
+  }
+}
+
+async function setDefaultModel(entryId) {
+  try {
+    const resp = await fetch('/api/models-config/default', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ id: entryId })
+    });
+    if (resp.ok) {
+      await loadConfigToUI();
+    }
+  } catch(e) {
+    console.error('Set default failed:', e);
+  }
+}
+
+async function refreshFormModels(selectedModel) {
+  const select = document.getElementById('f-model');
+  const btn = document.querySelector('#model-form button[onclick="refreshFormModels()"]');
+  const baseUrl = document.getElementById('f-base-url').value.trim();
+  const apiKey = document.getElementById('f-api-key').value.trim();
+
+  if (!baseUrl) {
+    select.innerHTML = '<option value="">请先填写接口地址</option>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>';
+  select.innerHTML = '<option value="">加载中…</option>';
+
+  try {
+    const resp = await fetch('/api/fetch-models', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ base_url: baseUrl, api_key: apiKey })
+    });
+    const data = await resp.json();
+    if (data.error) {
+      select.innerHTML = `<option value="">⚠️ ${escapeHtml(data.error)}</option>`;
+      return;
+    }
+    const models = data.models || [];
+    if (models.length === 0) {
+      select.innerHTML = '<option value="">未找到可用模型</option>';
+      return;
+    }
+    let html = '';
+    let hasSelected = false;
+    for (const m of models) {
+      const selected = (selectedModel && m === selectedModel) ? ' selected' : '';
+      if (selected) hasSelected = true;
+      html += `<option value="${escapeHtml(m)}"${selected}>${escapeHtml(m)}</option>`;
+    }
+    if (selectedModel && !hasSelected) {
+      html += `<option value="${escapeHtml(selectedModel)}" selected>${escapeHtml(selectedModel)}</option>`;
+    }
+    select.innerHTML = html;
+  } catch(e) {
+    select.innerHTML = `<option value="">⚠️ 请求失败: ${escapeHtml(e.message)}</option>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>';
+  }
+}
+
+function showFormStatus(msg, isError) {
+  const el = document.getElementById('form-status');
+  el.textContent = (isError ? '⚠️ ' : '✅ ') + msg;
+  el.classList.remove('opacity-0', 'text-emerald-500', 'text-red-500');
+  el.classList.add(isError ? 'text-red-500' : 'text-emerald-500');
+  setTimeout(() => el.classList.add('opacity-0'), 2500);
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// 技能管理
+// ══════════════════════════════════════════════════════════════════════
+
+async function loadSkills() {
+  const list = document.getElementById('skills-list');
+  list.innerHTML = '<div class="text-xs text-neutral-500 text-center py-4">加载中…</div>';
+  try {
+    const resp = await fetch('/api/skills');
+    const skills = await resp.json();
+    if (!skills || skills.length === 0) {
+      list.innerHTML = '<div class="text-xs text-neutral-500 text-center py-4">暂无技能，在下方输入目录路径安装</div>';
+      return;
+    }
+    let html = '';
+    for (const s of skills) {
+      html += `
+        <div class="rounded-xl border border-neutral-200 dark:border-white/[0.08] bg-white dark:bg-[#1a1a1a] p-3">
+          <div class="flex items-start gap-2">
+            <div class="w-6 h-6 rounded-lg bg-gradient-to-br from-primary-300 to-primary-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5">S</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-semibold text-neutral-800 dark:text-neutral-100">${escapeHtml(s.name)}</span>
+                <button onclick="removeSkill('${escapeHtml(s.name)}')" class="p-0.5 rounded hover:bg-white/10 text-neutral-400 hover:text-red-400 transition-colors flex-shrink-0" title="卸载">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+              <div class="text-xs text-neutral-400 mt-0.5 leading-relaxed">${escapeHtml(s.description)}</div>
+            </div>
+          </div>
+        </div>`;
+    }
+    list.innerHTML = html;
+  } catch(e) {
+    list.innerHTML = '<div class="text-xs text-red-400 text-center py-4">加载失败: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+async function refreshSkills() {
+  // 只是刷新列表
+  await loadSkills();
+}
+
+let _selectedSkillPath = '';
+
+async function selectDirectory() {
+  const status = document.getElementById('skill-install-status');
+  const btn = document.getElementById('btn-select-dir');
+  btn.disabled = true;
+  btn.textContent = '选择中…';
+  try {
+    const resp = await fetch('/api/select-directory', { method: 'POST' });
+    const data = await resp.json();
+    if (data.path) {
+      _selectedSkillPath = data.path;
+      document.getElementById('skill-path-display').textContent = data.path;
+      document.getElementById('skill-path-display').className = 'text-xs text-neutral-800 dark:text-neutral-100 truncate flex-1 font-mono';
+      document.getElementById('btn-scan').disabled = false;
+      status.textContent = '';
+      // 自动触发扫描
+      scanSkills();
+    } else {
+      status.textContent = data.error ? '⚠️ ' + data.error : '';
+    }
+  } catch(e) {
+    status.textContent = '⚠️ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '选择文件夹';
+  }
+}
+
+async function scanSkills() {
+  const status = document.getElementById('skill-install-status');
+  const resultsDiv = document.getElementById('scan-results');
+  const installArea = document.getElementById('scan-install-area');
+  const path = _selectedSkillPath;
+  if (!path) { status.textContent = '⚠️ 请先选择文件夹'; return; }
+
+  resultsDiv.classList.add('hidden');
+  installArea.classList.add('hidden');
+  status.textContent = '扫描中…';
+
+  try {
+    const resp = await fetch('/api/skills/scan', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ path })
+    });
+    const data = await resp.json();
+    if (data.error) {
+      status.textContent = '⚠️ ' + data.error;
+      return;
+    }
+    const skills = data.skills || [];
+    if (skills.length === 0) {
+      status.textContent = '未找到包含 SKILL.md 的技能';
+      return;
+    }
+
+    let html = '<label class="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/[0.03] cursor-pointer mb-1"><input type="checkbox" id="select-all-skills" onchange="toggleSelectAll()" class="accent-primary-500"><span class="text-xs text-neutral-400">全选/全不选</span></label>';
+    for (const s of skills) {
+      const disabled = s.already_installed ? 'disabled' : '';
+      const checked = s.already_installed ? '' : '';
+      html += `
+        <label class="flex items-start gap-2 p-2 rounded-lg border border-neutral-200 dark:border-white/[0.06] bg-white dark:bg-[#1a1a1a] cursor-pointer hover:border-primary-300 transition-colors ${disabled ? 'opacity-50' : ''}">
+          <input type="checkbox" class="skill-check mt-1 accent-primary-500" data-name="${escapeHtml(s.name)}" data-path="${escapeHtml(s.source_dir)}" ${checked} ${disabled} onchange="updateInstallCount()">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5">
+              <span class="text-sm font-medium text-neutral-800 dark:text-neutral-100">${escapeHtml(s.name)}</span>
+              ${s.already_installed ? '<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-neutral-500/15 text-neutral-500">已安装</span>' : ''}
+            </div>
+            <div class="text-xs text-neutral-400 mt-0.5 leading-relaxed">${escapeHtml(s.description)}</div>
+          </div>
+        </label>`;
+    }
+    resultsDiv.innerHTML = html;
+    resultsDiv.classList.remove('hidden');
+
+    updateInstallCount();
+
+    const installable = skills.filter(s => !s.already_installed).length;
+    status.textContent = '扫描到 ' + skills.length + ' 个技能' + (installable > 0 ? '（' + installable + ' 个可安装）' : '');
+  } catch(e) {
+    status.textContent = '⚠️ ' + e.message;
+  }
+}
+
+function toggleSelectAll() {
+  const allChecked = document.getElementById('select-all-skills').checked;
+  document.querySelectorAll('.skill-check:not(:disabled)').forEach(cb => {
+    cb.checked = allChecked;
+  });
+  updateInstallCount();
+}
+
+function updateInstallCount() {
+  const count = document.querySelectorAll('.skill-check:checked:not(:disabled)').length;
+  const btn = document.getElementById('btn-install-selected');
+  const area = document.getElementById('scan-install-area');
+  if (count > 0) {
+    area.classList.remove('hidden');
+    btn.disabled = false;
+    btn.textContent = '安装选中（' + count + '）';
+  } else {
+    btn.disabled = true;
+    btn.textContent = '安装选中（0）';
+  }
+}
+
+async function installSelected() {
+  const status = document.getElementById('skill-install-status');
+  const checkboxes = document.querySelectorAll('.skill-check:checked:not(:disabled)');
+  const items = Array.from(checkboxes).map(cb => ({ name: cb.dataset.name, path: cb.dataset.path }));
+  if (items.length === 0) { status.textContent = '请先勾选要安装的技能'; return; }
+
+  status.textContent = '安装中…';
+  let installed = 0;
+  let failed = 0;
+  for (const item of items) {
+    try {
+      const resp = await fetch('/api/skills/install', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ path: item.path })
+      });
+      const data = await resp.json();
+      if (data.installed && data.installed.length > 0) {
+        installed++;
+      } else {
+        failed++;
+      }
+    } catch(e) {
+      failed++;
+    }
+  }
+
+  await loadSkills();
+  document.getElementById('scan-results').classList.add('hidden');
+  document.getElementById('scan-install-area').classList.add('hidden');
+  status.textContent = '✅ 安装完成：成功 ' + installed + ' 个' + (failed > 0 ? '，失败 ' + failed + ' 个' : '');
+}
+
+async function removeSkill(name) {
+  if (!confirm(`确定卸载技能「${name}」？`)) return;
+  try {
+    const resp = await fetch('/api/skills/remove', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ name })
+    });
+    if (resp.ok) {
+      await loadSkills();
+    } else {
+      const err = await resp.json();
+      alert('卸载失败: ' + (err.error || ''));
+    }
+  } catch(e) {
+    alert('卸载失败: ' + e.message);
+  }
+}
+</script>
+</body>
+</html>

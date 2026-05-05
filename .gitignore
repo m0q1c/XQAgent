@@ -1,0 +1,21 @@
+# ── 运行时数据 ──
+config.json
+sessions/
+uploads/
+memory/L1_insight.txt
+memory/L2_facts.txt
+memory/L3_records/
+memory/L4_sessions/
+bridges/config.json
+
+# ── 构建产物 ──
+XQAgent.app/
+dist/
+
+# ── Python ──
+__pycache__/
+*.pyc
+
+# ── 系统 ──
+.DS_Store
+xqagent_icon.png
