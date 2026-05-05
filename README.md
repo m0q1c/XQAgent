@@ -12,7 +12,7 @@
 
 ### 2. 下载 XQAgent
 
-从 [Releases](../../releases) 下载最新版 `XQAgent-v{version}.zip`：
+从 [Releases](../../releases) 下载最新版 `XQAgent-v1.0.0.zip`：
 
 ```bash
 unzip XQAgent-v*.zip
