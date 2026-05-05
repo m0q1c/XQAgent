@@ -49,12 +49,6 @@ bash install.sh    # 安装到 /Applications/
 | **远控通道** | 支持微信、QQ、飞书等 7 个消息平台的桥接 |
 | **macOS 原生** | Swift + WKWebView 壳，31MB 自包含 .app |
 
-## 截图
-
-| 对话界面 | 模型配置 |
-|----------|----------|
-| ![Chat](https://via.placeholder.com/400x250?text=Chat+Screenshot) | ![Settings](https://via.placeholder.com/400x250?text=Settings+Screenshot) |
-
 ## 架构
 
 ```
