@@ -1,0 +1,17 @@
+{
+  "model": "your-model-id",
+  "api_key": "",
+  "base_url": "http://127.0.0.1:1234/v1",
+  "port": 18777,
+  "models": [
+    {
+      "id": "default",
+      "name": "默认模型",
+      "base_url": "http://127.0.0.1:1234/v1",
+      "api_key": "",
+      "model": "your-model-id",
+      "is_default": true
+    }
+  ],
+  "persona": ""
+}

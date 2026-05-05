@@ -1,0 +1,122 @@
+[
+  {
+    "name": "Agent Browser",
+    "description": "High-performance browser automation CLI (Rust-based, Node.js fallback). For automating web interactions, scraping structured data, filling forms, and testing web UIs via navigation, click, input, and snapshot commands.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/Agent Browser",
+    "installed_at": 1777905372.443077
+  },
+  {
+    "name": "csv-data-analysis",
+    "description": "This skill should be used when users need to analyze CSV or Excel files, understand data patterns, generate statistical summaries, or create data visualizations. Trigger keywords include \"analyze CSV\", \"analyze Excel\", \"data analysis\", \"CSV analysis\", \"Excel analysis\", \"data statistics\", \"generate charts\", \"data visualization\".",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/csv-data-analysis",
+    "installed_at": 1777905372.453755
+  },
+  {
+    "name": "self-improvement",
+    "description": "Captures learnings, errors, and corrections to enable continuous improvement. Use when: (1) A command or operation fails unexpectedly, (2) User corrects Claude ('No, that's wrong...', 'Actually...'), (3) User requests a capability that doesn't exist, (4) An external API or tool fails, (5) Claude realizes its knowledge is outdated or incorrect, (6) A better approach is discovered for a recurring task. Also review learnings before major tasks.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/self-improvement",
+    "installed_at": 1777905372.468281
+  },
+  {
+    "name": "xlsx",
+    "description": "Comprehensive spreadsheet creation, editing, and analysis with support for formulas, formatting, data analysis, and visualization. When Claude needs to work with spreadsheets (.xlsx, .xlsm, .csv, .tsv, etc) for: (1) Creating new spreadsheets with formulas and formatting, (2) Reading or analyzing data, (3) Modify existing spreadsheets while preserving formulas, (4) Data analysis and visualization in spreadsheets, or (5) Recalculating formulas",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/xlsx",
+    "installed_at": 1777905372.474432
+  },
+  {
+    "name": "summarize",
+    "description": "Summarize or extract text/transcripts from URLs, podcasts, and local files (great fallback for “transcribe this YouTube/video”).",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/summarize",
+    "installed_at": 1777905372.479228
+  },
+  {
+    "name": "pdf",
+    "description": "Comprehensive PDF manipulation toolkit for extracting text and tables, creating new PDFs, merging/splitting documents, and handling forms. When Claude needs to fill in a PDF form or programmatically process, generate, or analyze PDF documents at scale.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/pdf",
+    "installed_at": 1777905372.489471
+  },
+  {
+    "name": "find-skills",
+    "description": "Helps discover and install Agent skills. Invoke when users ask 'how do I do X', 'find a skill for X', or want to extend Agent capabilities.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/find-skills",
+    "installed_at": 1777905372.495647
+  },
+  {
+    "name": "article-writing",
+    "description": "Write articles, guides, blog posts, tutorials, newsletter issues, and other long-form content in a distinctive voice derived from supplied examples or brand guidance. Use when the user wants polished written content longer than a paragraph, especially when voice consistency, structure, and credibility matter.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/article-writing",
+    "installed_at": 1777905372.5010781
+  },
+  {
+    "name": "multi-search-engine",
+    "description": "Multi-search engine aggregation with 17 engines (8 domestic + 9 international). Supports advanced search syntax, time filtering, site search, privacy engines, and WolframAlpha knowledge queries. No API key required.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/multi-search-engine",
+    "installed_at": 1777905372.508259
+  },
+  {
+    "name": "skill-creator",
+    "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, update or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/skill-creator",
+    "installed_at": 1777905372.5201201
+  },
+  {
+    "name": "pptx",
+    "description": "Presentation creation, editing, and analysis. When Claude needs to work with presentations (.pptx files) for: (1) Creating new presentations, (2) Modifying or editing content, (3) Working with layouts, (4) Adding comments or speaker notes, or any other presentation tasks",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/pptx",
+    "installed_at": 1777905372.548682
+  },
+  {
+    "name": "humanize-ai-text",
+    "description": "Rewrite AI-generated text to pass AI detection tools. Invoke when users need ChatGPT/Claude/GPT output rewritten into natural human-style text to pass GPTZero, Turnitin, Originality.ai, and similar detectors.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/humanize-ai-text",
+    "installed_at": 1777905372.5545049
+  },
+  {
+    "name": "SysInfo",
+    "description": "Collect and report full hardware configuration of the local machine: CPU, memory, storage, GPU, network adapters, motherboard, BIOS/UEFI, and OS baseline. Produces a structured hardware-report.json and a human-readable summary.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/SysInfo",
+    "installed_at": 1777905372.5602822
+  },
+  {
+    "name": "markdown-converter",
+    "description": "Convert documents and files to Markdown using markitdown. Use when converting PDF, Word (.docx), PowerPoint (.pptx), Excel (.xlsx, .xls), HTML, CSV, JSON, XML, images (with EXIF/OCR), audio (with transcription), ZIP archives, YouTube URLs, or EPubs to Markdown format for LLM processing or text analysis.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/markdown-converter",
+    "installed_at": 1777905372.563659
+  },
+  {
+    "name": "weather",
+    "description": "Get current weather and forecasts (no API key required).",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/weather",
+    "installed_at": 1777905372.5669708
+  },
+  {
+    "name": "pdf-extractor",
+    "description": "Extract text, tables, and form data from PDF documents for analysis and processing. Use when user asks to extract, parse, or analyze PDF files.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/pdf-extractor",
+    "installed_at": 1777905372.5705652
+  },
+  {
+    "name": "docx",
+    "description": "Use this skill whenever the user wants to create, read, edit, or manipulate Word documents (.docx files). Triggers include: any mention of 'Word doc', 'word document', '.docx', or requests to produce professional documents with formatting like tables of contents, headings, page numbers, or letterheads. Also use when extracting or reorganizing content from .docx files, inserting or replacing images in documents, performing find-and-replace in Word files, working with tracked changes or comments, or converting content into a polished Word document. If the user asks for a 'report', 'memo', 'letter', 'template', or similar deliverable as a Word or .docx file, use this skill. Do NOT use for PDFs, spreadsheets, Google Docs, or general coding tasks unrelated to document generation.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/docx",
+    "installed_at": 1777905372.615817
+  },
+  {
+    "name": "skill-vetter",
+    "description": "AI Agent skill security review tool (security-first). Must be invoked before installing any skill from ClawdHub, GitHub, or other sources. Checks for red flags, permission scope, and suspicious code patterns to prevent malicious skills.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/skill-vetter",
+    "installed_at": 1777905372.6201758
+  },
+  {
+    "name": "file-organizer",
+    "description": "Smart file/desktop organizer skill. Provides safe file categorization with zero deletion and zero tampering, supporting smart scanning, keyword/semantic matching into existing folders, auto-classification by frequency or file type, complete operation logs, and one-click undo. Also supports desktop icon arrangement by project type.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/file-organizer",
+    "installed_at": 1777905372.625973
+  },
+  {
+    "name": "skill-writer",
+    "description": "Guide users through creating Agent Skills for Claude Code. Use when the user wants to create, write, author, or design a new Skill, or needs help with SKILL.md files, frontmatter, or skill structure.",
+    "source_dir": "/Users/m0q1c/HackTools/AI/XQAgent/skills/skill-writer",
+    "installed_at": 1777905372.62927
+  }
+]
