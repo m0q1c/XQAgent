@@ -50,8 +50,8 @@ bash install.sh    # 安装到 /Applications/
 | **macOS 原生** | Swift + WKWebView 壳，31MB 自包含 .app |
 
 ## 截图
+<img width="2200" height="1504" alt="1" src="https://github.com/user-attachments/assets/c7c32434-7a33-4cb9-bdb9-12f4394dc760" />
 
-![1](/Users/m0q1c/HackTools/AI/XQAgent/1.png)
 
 ## 架构
 
