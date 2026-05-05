@@ -6,13 +6,13 @@
 
 ## 快速开始
 
-### 1. 安装 LM Studio
+### 1. 安装 LM Studio（调用云端大模型可跳过）
 
 下载 [LM Studio](https://lmstudio.ai/)，加载一个模型（推荐 `qwen/qwen3.5-9b`），启动本地服务器（默认端口 1234）。
 
 ### 2. 下载 XQAgent
 
-从 [Releases](../../releases) 下载最新版 `XQAgent-v{version}.zip`：
+从 [Releases](../../releases) 下载最新版 `XQAgent-v1.0.0.zip`：
 
 ```bash
 unzip XQAgent-v*.zip
@@ -50,10 +50,7 @@ bash install.sh    # 安装到 /Applications/
 | **macOS 原生** | Swift + WKWebView 壳，31MB 自包含 .app       |
 
 ## 截图
-
-| 对话界面                                                     | 模型配置                                                     |
-| ------------------------------------------------------------ | ------------------------------------------------------------ |
-| ![Chat](https://via.placeholder.com/400x250?text=Chat+Screenshot) | ![Settings](https://via.placeholder.com/400x250?text=Settings+Screenshot) |
+<img width="2200" height="1504" alt="1" src="https://github.com/user-attachments/assets/56c8c532-c157-4051-8384-5b0d4c83dbb7" />
 
 ## 架构
 
